@@ -1,11 +1,27 @@
-package Main;
-
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Student {
-    private static int nextId = 1;
-    private int id;
+public class Student extends AbstractStudent {
+
+    static {
+        try {
+            Connection conn = DatabaseConnection.getConnection();
+            PreparedStatement stmt = conn.prepareStatement("SELECT COALESCE(MAX(id), 0) + 1 FROM students");
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                nextId = rs.getInt(1);
+            } else {
+                nextId = 1;
+            }
+        } catch (SQLException e) {
+            nextId = 1;
+            System.err.println("Failed to initialize nextId: " + e.getMessage());
+        }
+    }
     private String firstName;
     private String lastName;
     private int yearOfBirth;
@@ -16,72 +32,7 @@ public class Student {
     public static final int MAX_GRADE = 5;
 
     public Student(String firstName, String lastName, int yearOfBirth, Group group) {
-        this.id = nextId++;
-        this.firstName = firstName;
-        this.lastName = lastName;
-        this.yearOfBirth = yearOfBirth;
-        this.group = group;
-        this.grades = new ArrayList<>();
-    }
-
-    public int getId() {
-        return id;
-    }
-
-    public void setId(int id) {
-        this.id = id;
-    }
-
-    public String getFirstName() {
-        return firstName;
-    }
-
-    public String getLastName() {
-        return lastName;
-    }
-
-    public int getYearOfBirth() {
-        return yearOfBirth;
-    }
-
-    public Group getGroup() {
-        return group;
-    }
-
-    public List<Integer> getGrades() {
-        return grades;
-    }
-
-    public void setGrades(List<Integer> grades) {
-        this.grades = grades;
-    }
-
-    public void print() {
-        System.out.println("Student ID: " + this.getId());
-        System.out.println("First Name: " + this.getFirstName());
-        System.out.println("Last Name: " + this.getLastName());
-        System.out.println("Year of Birth: " + this.getYearOfBirth());
-        System.out.println("Group: " + this.getGroup());
-        System.out.println("Average Grade: " + this.getAverageGrade());
-    }
-
-    public Float getAverageGrade() {
-        Integer totalGrades = 0;
-        if (grades.size() > 0) {
-            for (int i = 0; i < grades.size(); i++) {
-                totalGrades += grades.get(i);
-            }
-        } else {
-            return (float) 0.0;
-        }
-        return (float) totalGrades / grades.size();
-    }
-
-    public void addGrade(int grade) {
-        if (grade < MIN_GRADE || grade > MAX_GRADE) {
-            throw new IllegalArgumentException("Grade must be between " + MIN_GRADE + " and " + MAX_GRADE);
-        }
-        this.grades.add(grade);
+        super(firstName, lastName, yearOfBirth, group);
     }
 
     private static final java.util.Map<Character, String> MORSE_CODE = new java.util.HashMap<>() {

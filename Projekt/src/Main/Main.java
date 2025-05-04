@@ -1,18 +1,42 @@
-package Main;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class Main {
   private static List<Student> students = new ArrayList<>();
   private static List<Student> cybersecurityStudents = new ArrayList<>();
   private static List<Student> telecommunicationStudents = new ArrayList<>();
+  private static Connection connection;
+
+  private static void loadStudentsFromDatabase(StudentDAO studentDAO) throws SQLException {
+    String sql = "SELECT id FROM students";
+    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+      ResultSet rs = pstmt.executeQuery();
+      while (rs.next()) {
+        int studentId = rs.getInt("id");
+        Student student = studentDAO.getStudent(studentId);
+        if (student != null) {
+          createStudent(student);
+        }
+      }
+    }
+  }
 
   public static void main(String[] args) {
+    try {
+      connection = DatabaseConnection.getConnection();
+      StudentDAO studentDAO = new StudentDAO(connection);
+      loadStudentsFromDatabase(studentDAO);
+      System.out.println("Students loaded from database successfully!");
+    } catch (SQLException e) {
+      System.out.println("Failed to load students from database!");
+    }
     Scanner scanner = new Scanner(System.in);
     boolean running = true;
-
     while (running) {
       System.out.println("\n=== Student Management System ===");
       System.out.println("1. Create a new student");
@@ -26,11 +50,7 @@ public class Main {
       System.out.println("9. Save student to file");
       System.out.println("10. Import student");
       System.out.println("0. Exit");
-      System.out.print("Enter your choice: ");
-
-      int choice = scanner.nextInt();
-      scanner.nextLine(); // Consume newline
-
+      int choice = getValidInteger(scanner);
       switch (choice) {
         case 1:
           System.out.println("\n=== Create New Student ===");
@@ -68,7 +88,19 @@ public class Main {
           System.out.print("Enter student ID to delete: ");
           studentId = scanner.nextInt();
           scanner.nextLine();
-          deleteStudent(studentId);
+          Student studentToDelete = getStudent(studentId);
+          if (studentToDelete != null) {
+            System.out.print("Are you sure? (Y to confirm): ");
+            String confirm = scanner.nextLine().trim().toUpperCase();
+            if (confirm.equals("Y")) {
+              deleteStudent(studentId);
+              System.out.println("Student deleted successfully!");
+            } else {
+              System.out.println("Deletion cancelled.");
+            }
+          } else {
+            System.out.println("Student not found!");
+          }
           break;
         case 4:
           System.out.println("\n=== Find Student ===");
@@ -115,6 +147,37 @@ public class Main {
             System.out.println("Student import failed!");
           break;
         case 0:
+          System.out.println("\nSynchronizing students with database before exit...");
+          try {
+            String sql = "SELECT id FROM students";
+            PreparedStatement pstmt = connection.prepareStatement(sql);
+            ResultSet rs = pstmt.executeQuery();
+            List<Integer> dbStudentIds = new ArrayList<>();
+            while (rs.next()) {
+              dbStudentIds.add(rs.getInt("id"));
+            }
+
+            StudentDAO studentDAO = new StudentDAO(connection);
+            for (Student currentStudent : students) {
+              if (!dbStudentIds.contains(currentStudent.getId())) {
+                System.out.println("Saving student ID " + currentStudent.getId() + " to database...");
+                studentDAO.saveStudent(currentStudent);
+              }
+            }
+
+            List<Integer> memoryStudentIds = students.stream()
+                .map(Student::getId)
+                .toList();
+            for (Integer dbId : dbStudentIds) {
+              if (!memoryStudentIds.contains(dbId)) {
+                System.out.println("Deleting student ID " + dbId + " from database...");
+                studentDAO.deleteStudent(dbId);
+              }
+            }
+            System.out.println("Synchronization complete!");
+          } catch (SQLException e) {
+            System.out.println("Error during synchronization: " + e.getMessage());
+          }
           running = false;
           break;
         default:
@@ -123,6 +186,34 @@ public class Main {
     }
 
     scanner.close();
+
+    if (connection != null) {
+      try {
+        connection.close();
+      } catch (SQLException e) {
+        e.printStackTrace();
+      }
+    }
+  }
+
+  public static int getValidInteger(Scanner scanner) {
+    while (true) {
+      System.out.print("Please enter your choice: ");
+      String input = scanner.nextLine();
+
+      if (isInteger(input)) {
+        return Integer.parseInt(input);
+      }
+    }
+  }
+
+  private static boolean isInteger(String str) {
+    try {
+      Integer.parseInt(str);
+      return true;
+    } catch (NumberFormatException e) {
+      return false;
+    }
   }
 
   private static Student getStudent(int id) {
@@ -229,10 +320,12 @@ public class Main {
         } else if (line.toLowerCase().contains("grades")) {
           String gradesString = line.split(": ")[1].trim();
           gradesString = gradesString.substring(1, gradesString.length() - 1).trim();
-          String[] gradesStr = gradesString.split(",");
-          for (String gradeStr : gradesStr) {
-            System.out.println(gradeStr);
-            grades.add(Integer.parseInt(gradeStr));
+          if (gradesString.length() > 0) {
+            String[] gradesStr = gradesString.split(",");
+            for (String gradeStr : gradesStr) {
+              System.out.println(gradeStr);
+              grades.add(Integer.parseInt(gradeStr));
+            }
           }
         }
       }
@@ -246,8 +339,8 @@ public class Main {
       createStudent(student);
       return true;
     } catch (Exception e) {
+      System.out.println("Error importing student: " + e.getMessage());
       return false;
     }
   }
-
 }
